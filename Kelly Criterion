@@ -1,0 +1,68 @@
+import random
+
+def simulate_game(initial_balance=100, risk_percent=0.10, win_rate=0.55, target=1000000, ruin=5):
+    balance = initial_balance
+    peak_balance = initial_balance
+    rounds = 0
+    
+    while ruin < balance < target:
+        rounds += 1
+        # 计算本次投入金额（本金的10%）
+        bet_amount = balance * risk_percent
+        
+        # 模拟胜负
+        if random.random() < win_rate:
+            balance += bet_amount  # 胜利，赚取投入金额
+        else:
+            balance -= bet_amount  # 失败，亏损投入金额
+            
+        # 更新历史最高本金
+        if balance > peak_balance:
+            peak_balance = balance
+            
+    # 确定结果
+    result = "成功（达到100万）" if balance >= target else "失败（低于5元）"
+    is_success = balance >= target  # ← 添加布尔标记用于统计
+    
+    return {
+        "rounds": rounds,
+        "final_balance": round(balance, 2),
+        "peak_balance": round(peak_balance, 2),
+        "result": result,
+        "is_success": is_success  # ← 返回成功状态
+    }
+
+# ========== 配置运行次数 ==========
+NUM_SIMULATIONS = 500
+# ================================
+
+# 统计变量
+success_count = 0
+fail_count = 0
+total_rounds = 0
+
+print(f"{'序号':<5} | {'结果':<12} | {'回合数':<8} | {'最终本金':<15} | {'历史最高':<15}")
+print("-" * 70)
+
+for i in range(1, NUM_SIMULATIONS + 1):
+    data = simulate_game()
+    
+    # 统计成功/失败
+    if data['is_success']:
+        success_count += 1
+    else:
+        fail_count += 1
+    
+    total_rounds += data['rounds']
+    
+    print(f"{i:<6} | {data['result']:<10} | {data['rounds']:<10} | {data['final_balance']:<18} | {data['peak_balance']:<15}")
+
+# ========== 添加统计汇总 ==========
+print("=" * 70)
+print(f"\n📊 【统计汇总】")
+print(f"总模拟次数: {NUM_SIMULATIONS}")
+print(f"成功次数:   {success_count}")
+print(f"失败次数:   {fail_count}")
+print(f"总胜率:     {success_count / NUM_SIMULATIONS * 100:.2f}%")
+print(f"平均回合数: {total_rounds / NUM_SIMULATIONS:.1f}")
+print("=" * 70)

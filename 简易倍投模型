@@ -1,0 +1,50 @@
+import random
+
+def run_multi_simulations(num_sims=10, rounds_per_sim=60000):
+    win_rate = 0.6
+    initial_capital = 100
+    
+    overall_results = []
+
+    print(f"开始执行 {num_sims} 轮模拟，每轮 {rounds_per_sim} 局...")
+    print("-" * 60)
+    print(f"{'模拟序号':<10} {'最终本金':<15} {'最高连败':<10} {'最高资金':<15} {'状态':<10}")
+
+    for i in range(1, num_sims + 1):
+        capital = initial_capital
+        bet = 1
+        max_lost_streak = 0
+        current_lost_streak = 0
+        peak_capital = initial_capital
+        status = "完成"
+
+        for r in range(rounds_per_sim):
+            current_bet = min(bet, capital)
+            
+            if random.random() < win_rate:
+                # 赢了
+                capital += current_bet
+                bet = 1
+                current_lost_streak = 0
+            else:
+                # 输了
+                capital -= current_bet
+                current_lost_streak += 1
+                max_lost_streak = max(max_lost_streak, current_lost_streak)
+                bet *= 2
+            
+            peak_capital = max(peak_capital, capital)
+
+            if capital <= 0:
+                status = "破产"
+                break
+        
+        print(f"{i:<12} {int(capital):<18} {max_lost_streak:<12} {int(peak_capital):<18} {status}")
+        overall_results.append(capital)
+
+    print("-" * 60)
+    success_count = sum(1 for x in overall_results if x > 0)
+    print(f"统计结果：{num_sims} 次模拟中，{success_count} 次存活，{num_sims - success_count} 次破产。")
+
+# 执行 10 次 60,000 局的模拟
+run_multi_simulations(num_sims=10, rounds_per_sim=60000)

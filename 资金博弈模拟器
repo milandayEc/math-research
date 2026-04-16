@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>资金博弈模拟器</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f5f4f0;
+    color: #1a1a18;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+  .container { max-width: 740px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 500; margin-bottom: 0.25rem; }
+  .subtitle { font-size: 13px; color: #6b6b67; margin-bottom: 1.5rem; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 1.5rem; }
+  .metric-card {
+    background: #eceae3;
+    border-radius: 8px;
+    padding: 0.9rem 1rem;
+  }
+  .metric-label { font-size: 12px; color: #6b6b67; margin-bottom: 4px; }
+  .metric-value { font-size: 22px; font-weight: 500; }
+
+  .panel {
+    background: #fff;
+    border: 0.5px solid rgba(0,0,0,0.12);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .panel-title { font-size: 13px; font-weight: 500; color: #6b6b67; margin-bottom: 1rem; }
+
+  .slider-row { margin-bottom: 14px; }
+  .slider-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+  .slider-label { font-size: 13px; color: #444441; }
+  .slider-val { font-size: 13px; font-weight: 500; color: #1a1a18; min-width: 52px; text-align: right; }
+  input[type=range] {
+    width: 100%; height: 4px; appearance: none; background: #d3d1c7;
+    border-radius: 2px; outline: none; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: #1a1a18; cursor: pointer;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #1a1a18; cursor: pointer; border: none;
+  }
+  /* special color for cashflow slider */
+  #sl-cf { background: #d3d1c7; }
+
+  button {
+    width: 100%; padding: 11px; font-size: 14px; font-weight: 500;
+    background: #1a1a18; color: #f5f4f0; border: none;
+    border-radius: 8px; cursor: pointer; margin-bottom: 1.5rem;
+    transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.85; }
+  button:active { opacity: 0.7; }
+
+  .result-panel {
+    border: 0.5px solid rgba(0,0,0,0.12);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+  }
+  .result-label { font-size: 12px; color: #6b6b67; margin-bottom: 6px; font-weight: 500; }
+  .result-rate { font-size: 26px; font-weight: 500; margin-bottom: 2px; }
+  .result-sub { font-size: 12px; color: #6b6b67; margin-bottom: 10px; }
+  .result-rounds { font-size: 15px; font-weight: 500; margin-bottom: 2px; }
+
+  .verdict {
+    background: #eceae3;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #444441;
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+  }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; font-size: 12px; color: #6b6b67; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  .chart-wrap { position: relative; width: 100%; height: 260px; margin-bottom: 1.5rem; }
+
+  .dist-label { font-size: 13px; color: #6b6b67; margin-bottom: 6px; font-weight: 500; }
+  .dist-bar { display: flex; height: 28px; border-radius: 6px; overflow: hidden; gap: 2px; }
+  .dist-seg { display: flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; font-weight: 500; }
+
+  .hidden { display: none; }
+
+  @media (max-width: 500px) {
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>资金博弈模拟器</h1>
+  <p class="subtitle">对比有无固定收支对游戏结果的影响</p>
+
+  <div class="grid-2">
+    <div class="metric-card">
+      <div class="metric-label">模拟次数</div>
+      <div class="metric-value" id="stat-sims">200</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">固定收支</div>
+      <div class="metric-value" id="stat-cashflow">-0.5 元/轮</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">基础参数</div>
+    <div class="grid-2" style="gap:1.5rem; margin-bottom:0;">
+      <div>
+        <div class="slider-row">
+          <div class="slider-header">
+            <span class="slider-label">初始本金</span>
+            <span class="slider-val" id="out-balance">100 元</span>
+          </div>
+          <input type="range" min="50" max="500" step="50" value="100" id="sl-balance"
+            oninput="document.getElementById('out-balance').textContent=this.value+' 元'">
+        </div>
+        <div class="slider-row">
+          <div class="slider-header">
+            <span class="slider-label">胜率</span>
+            <span class="slider-val" id="out-wr">55%</span>
+          </div>
+          <input type="range" min="40" max="70" step="1" value="55" id="sl-wr"
+            oninput="document.getElementById('out-wr').textContent=this.value+'%'">
+        </div>
+        <div class="slider-row">
+          <div class="slider-header">
+            <span class="slider-label">每轮投入比例</span>
+            <span class="slider-val" id="out-risk">10%</span>
+          </div>
+          <input type="range" min="5" max="30" step="5" value="10" id="sl-risk"
+            oninput="document.getElementById('out-risk').textContent=this.value+'%'">
+        </div>
+      </div>
+      <div>
+        <div class="slider-row">
+          <div class="slider-header">
+            <span class="slider-label">固定收支（元/轮）</span>
+            <span class="slider-val" id="out-cf">-0.5</span>
+          </div>
+          <input type="range" min="-2" max="2" step="0.1" value="-0.5" id="sl-cf"
+            oninput="
+              const v = parseFloat(this.value).toFixed(1);
+              document.getElementById('out-cf').textContent = (v>0?'+':'')+v;
+              document.getElementById('stat-cashflow').textContent = (v>0?'+':'')+v+' 元/轮';
+            ">
+        </div>
+        <div class="slider-row">
+          <div class="slider-header">
+            <span class="slider-label">破产线（元）</span>
+            <span class="slider-val" id="out-ruin">5 元</span>
+          </div>
+          <input type="range" min="1" max="50" step="1" value="5" id="sl-ruin"
+            oninput="document.getElementById('out-ruin').textContent=this.value+' 元'">
+        </div>
+        <div class="slider-row">
+          <div class="slider-header">
+            <span class="slider-label">模拟次数</span>
+            <span class="slider-val" id="out-sims">200</span>
+          </div>
+          <input type="range" min="50" max="500" step="50" value="200" id="sl-sims"
+            oninput="
+              document.getElementById('out-sims').textContent=this.value;
+              document.getElementById('stat-sims').textContent=this.value;
+            ">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button onclick="runSim()">▶ 运行模拟</button>
+
+  <div id="results" class="hidden">
+    <div class="grid-2" style="margin-bottom:1rem;">
+      <div class="result-panel">
+        <div class="result-label">无固定收支（基准）</div>
+        <div class="result-rate" id="base-rate">—</div>
+        <div class="result-sub">成功率</div>
+        <div class="result-rounds" id="base-rounds">—</div>
+        <div class="result-sub">平均回合数</div>
+      </div>
+      <div class="result-panel">
+        <div class="result-label" id="cf-card-title">有固定收支</div>
+        <div class="result-rate" id="cf-rate">—</div>
+        <div class="result-sub">成功率</div>
+        <div class="result-rounds" id="cf-rounds">—</div>
+        <div class="result-sub">平均回合数</div>
+      </div>
+    </div>
+
+    <div class="verdict" id="verdict"></div>
+
+    <div class="legend">
+      <span style="display:flex;align-items:center;gap:5px;">
+        <span class="legend-dot" style="background:#378ADD;"></span>无固定收支（基准）
+      </span>
+      <span style="display:flex;align-items:center;gap:5px;">
+        <span class="legend-dot" style="background:#D85A30;"></span>有固定收支
+      </span>
+    </div>
+
+    <div class="chart-wrap">
+      <canvas id="rateChart" role="img" aria-label="成功率对比柱状图：基准 vs 有固定收支"></canvas>
+    </div>
+
+    <div class="dist-label">有固定收支情况下的结果分布</div>
+    <div class="dist-bar" id="dist-bar"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+let rateChart = null;
+
+function simulateGame(initBal, riskPct, winRate, target, ruin, cashflow) {
+  let balance = initBal;
+  let rounds = 0;
+  const maxRounds = 300000;
+  while (balance > ruin && balance < target && rounds < maxRounds) {
+    rounds++;
+    const bet = balance * riskPct;
+    balance += (Math.random() < winRate) ? bet : -bet;
+    balance += cashflow;
+  }
+  return { rounds, success: balance >= target };
+}
+
+function runSim() {
+  const initBal  = +document.getElementById('sl-balance').value;
+  const winRate  = +document.getElementById('sl-wr').value / 100;
+  const riskPct  = +document.getElementById('sl-risk').value / 100;
+  const cashflow = parseFloat(parseFloat(document.getElementById('sl-cf').value).toFixed(1));
+  const ruin     = +document.getElementById('sl-ruin').value;
+  const N        = +document.getElementById('sl-sims').value;
+  const TARGET   = 1000000;
+
+  let baseSuccess = 0, baseRounds = 0;
+  let cfSuccess = 0, cfRounds = 0;
+
+  for (let i = 0; i < N; i++) {
+    const b = simulateGame(initBal, riskPct, winRate, TARGET, ruin, 0);
+    if (b.success) baseSuccess++;
+    baseRounds += b.rounds;
+
+    const c = simulateGame(initBal, riskPct, winRate, TARGET, ruin, cashflow);
+    if (c.success) cfSuccess++;
+    cfRounds += c.rounds;
+  }
+
+  const baseRate = (baseSuccess / N * 100).toFixed(1);
+  const cfRate   = (cfSuccess  / N * 100).toFixed(1);
+  const baseAvg  = Math.round(baseRounds / N);
+  const cfAvg    = Math.round(cfRounds   / N);
+
+  document.getElementById('base-rate').textContent   = baseRate + '%';
+  document.getElementById('cf-rate').textContent     = cfRate   + '%';
+  document.getElementById('base-rounds').textContent = baseAvg.toLocaleString() + ' 轮';
+  document.getElementById('cf-rounds').textContent   = cfAvg.toLocaleString()   + ' 轮';
+
+  const cfSign  = cashflow >= 0 ? '+' : '';
+  const cfLabel = cashflow >= 0
+    ? `固定收入 +${cashflow.toFixed(1)}/轮`
+    : `固定支出 ${cashflow.toFixed(1)}/轮`;
+  document.getElementById('cf-card-title').textContent = cfLabel;
+
+  const diff = parseFloat(cfRate) - parseFloat(baseRate);
+  let verdict = '';
+  if (Math.abs(diff) < 0.5) {
+    verdict = `固定收支（${cfSign}${cashflow.toFixed(1)} 元/轮）对结果影响极小（差异 ${diff.toFixed(1)}%），此参数下博弈本身的随机性占主导。`;
+  } else if (diff < 0) {
+    verdict = `固定支出使成功率下降了 ${Math.abs(diff).toFixed(1)} 个百分点。每轮流失 ${Math.abs(cashflow).toFixed(1)} 元在本金小时影响最大，持续侵蚀早期存活空间。`;
+  } else {
+    verdict = `固定收入使成功率提升了 ${diff.toFixed(1)} 个百分点。每轮 +${cashflow.toFixed(1)} 元相当于给本金加了一条安全垫，熬过连败的概率更高。`;
+  }
+  document.getElementById('verdict').textContent = verdict;
+
+  const successPct = Math.round(cfSuccess / N * 100);
+  const failPct    = 100 - successPct;
+  const distBar    = document.getElementById('dist-bar');
+  distBar.innerHTML = `
+    <div class="dist-seg" style="width:${successPct}%;background:#378ADD;min-width:${successPct>5?0:0}px;">
+      ${successPct > 8 ? successPct + '%' : ''}
+    </div>
+    <div class="dist-seg" style="width:${failPct}%;background:#E24B4A;">
+      ${failPct > 8 ? failPct + '%' : ''}
+    </div>`;
+
+  if (rateChart) rateChart.destroy();
+  rateChart = new Chart(document.getElementById('rateChart'), {
+    type: 'bar',
+    data: {
+      labels: ['基准（无收支）', cfLabel],
+      datasets: [{
+        label: '成功率 %',
+        data: [parseFloat(baseRate), parseFloat(cfRate)],
+        backgroundColor: ['#378ADD', '#D85A30'],
+        borderRadius: 4,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` 成功率: ${ctx.raw.toFixed(1)}%` } }
+      },
+      scales: {
+        y: {
+          min: 0, max: 100,
+          ticks: { callback: v => v + '%', font: { size: 12 } },
+          grid: { color: 'rgba(0,0,0,0.07)' }
+        },
+        x: { ticks: { font: { size: 12 } }, grid: { display: false } }
+      }
+    }
+  });
+
+  document.getElementById('results').classList.remove('hidden');
+}
+</script>
+</body>
+</html>

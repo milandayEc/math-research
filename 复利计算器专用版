@@ -1,0 +1,198 @@
+
+<h2 class="sr-only">复利计算器：按年利率、每回合投入、总回合数计算财富增长，每20回合为1个月</h2>
+
+<style>
+.wrap { padding: 1.5rem 0; font-family: var(--font-sans); }
+.input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 1.5rem; }
+.input-card { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px 14px; }
+.input-label { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 6px; }
+.input-hint { font-size: 11px; color: var(--color-text-tertiary); margin-top: 4px; }
+.input-row { display: flex; align-items: center; gap: 8px; }
+.input-row input[type=number] { flex: 1; min-width: 0; font-size: 15px; font-weight: 500; }
+.input-unit { font-size: 13px; color: var(--color-text-secondary); white-space: nowrap; }
+.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
+.metric { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px 14px; }
+.metric-label { font-size: 11px; color: var(--color-text-secondary); margin-bottom: 4px; }
+.metric-value { font-size: 17px; font-weight: 500; color: var(--color-text-primary); }
+.metric-value.hl { color: #185FA5; }
+.time-info { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 1rem; padding: 8px 12px; background: var(--color-background-secondary); border-radius: var(--border-radius-md); display: flex; gap: 16px; }
+.chart-wrap { position: relative; width: 100%; height: 260px; margin-bottom: 0.5rem; }
+.legend { display: flex; gap: 20px; font-size: 12px; color: var(--color-text-secondary); margin-bottom: 0.75rem; }
+.legend span { display: flex; align-items: center; gap: 5px; }
+.leg-dot { width: 10px; height: 10px; border-radius: 2px; }
+</style>
+
+<div class="wrap">
+  <div class="input-grid">
+    <div class="input-card">
+      <div class="input-label">初始本金</div>
+      <div class="input-row">
+        <input type="number" id="principal" value="100" min="0" step="1">
+        <span class="input-unit">元</span>
+      </div>
+    </div>
+    <div class="input-card">
+      <div class="input-label">每回合固定投入</div>
+      <div class="input-row">
+        <input type="number" id="contribution" value="2" min="0" step="0.1">
+        <span class="input-unit">元</span>
+      </div>
+    </div>
+    <div class="input-card">
+      <div class="input-label">年利率</div>
+      <div class="input-row">
+        <input type="number" id="annual-rate" value="3" min="0" max="1000" step="0.1">
+        <span class="input-unit">%</span>
+      </div>
+      <div class="input-hint">每回合利率 = <span id="per-round-rate">0.01250</span>%</div>
+    </div>
+    <div class="input-card">
+      <div class="input-label">回合数（每20回合=1个月）</div>
+      <div class="input-row">
+        <input type="number" id="rounds" value="3000" min="20" max="10000" step="20">
+        <span class="input-unit">回合</span>
+      </div>
+      <div class="input-hint">上限 10,000 回合（500个月）</div>
+    </div>
+  </div>
+
+  <div class="time-info">
+    <span>共 <strong id="disp-months">—</strong> 个月</span>
+    <span>≈ <strong id="disp-years">—</strong> 年</span>
+    <span>月投入：<strong id="disp-monthly">—</strong> 元</span>
+    <span>换算月利率：<strong id="disp-monthly-rate">—</strong>%</span>
+  </div>
+
+  <div class="metric-grid">
+    <div class="metric">
+      <div class="metric-label">最终总资产</div>
+      <div class="metric-value hl" id="final-total">—</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">总投入本金</div>
+      <div class="metric-value" id="total-input">—</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">总利息收益</div>
+      <div class="metric-value" id="total-interest">—</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">收益倍数</div>
+      <div class="metric-value" id="multiplier">—</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><span class="leg-dot" style="background:#185FA5"></span>总资产</span>
+    <span><span class="leg-dot" style="background:#85B7EB"></span>累计本金</span>
+    <span><span class="leg-dot" style="background:#1D9E75"></span>累计利息</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="chart" role="img" aria-label="复利增长曲线，展示总资产、累计本金与累计利息随时间变化"></canvas>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+function fmt(n) {
+  if (Math.abs(n) >= 1e8) return (n/1e8).toFixed(2) + ' 亿';
+  if (Math.abs(n) >= 1e4) return (n/1e4).toFixed(2) + ' 万';
+  return n.toFixed(2);
+}
+
+let myChart = null;
+
+function update() {
+  const principal = parseFloat(document.getElementById('principal').value) || 0;
+  const contribution = parseFloat(document.getElementById('contribution').value) || 0;
+  const annualRate = parseFloat(document.getElementById('annual-rate').value) || 0;
+  let rounds = parseInt(document.getElementById('rounds').value) || 20;
+  rounds = Math.min(10000, Math.max(20, rounds));
+
+  const ROUNDS_PER_MONTH = 20;
+  const monthlyRate = annualRate / 12 / 100;
+  const roundRate = annualRate / 12 / 20 / 100;
+  const months = Math.floor(rounds / ROUNDS_PER_MONTH);
+  const years = (months / 12).toFixed(1);
+  const monthlyContribution = contribution * ROUNDS_PER_MONTH;
+
+  document.getElementById('per-round-rate').textContent = (roundRate * 100).toFixed(5);
+  document.getElementById('disp-months').textContent = months;
+  document.getElementById('disp-years').textContent = years;
+  document.getElementById('disp-monthly').textContent = monthlyContribution.toFixed(1);
+  document.getElementById('disp-monthly-rate').textContent = (monthlyRate * 100).toFixed(4);
+
+  const step = Math.max(1, Math.floor(rounds / 200));
+  const labels = [], totals = [], inputs = [], interests = [];
+  let balance = principal;
+
+  for (let i = 1; i <= rounds; i++) {
+    balance = balance * (1 + roundRate) + contribution;
+    if (i % step === 0 || i === rounds) {
+      const totalIn = principal + contribution * i;
+      const m = Math.floor(i / ROUNDS_PER_MONTH);
+      labels.push(m + 'mo');
+      totals.push(parseFloat(balance.toFixed(4)));
+      inputs.push(parseFloat(totalIn.toFixed(4)));
+      interests.push(parseFloat((balance - totalIn).toFixed(4)));
+    }
+  }
+
+  const totalIn = principal + contribution * rounds;
+  const totalInterest = balance - totalIn;
+
+  document.getElementById('final-total').textContent = fmt(balance) + ' 元';
+  document.getElementById('total-input').textContent = fmt(totalIn) + ' 元';
+  document.getElementById('total-interest').textContent = fmt(totalInterest) + ' 元';
+  document.getElementById('multiplier').textContent = totalIn > 0 ? (balance / totalIn).toFixed(2) + ' 倍' : '—';
+
+  if (myChart) myChart.destroy();
+  myChart = new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: '总资产', data: totals, borderColor: '#185FA5', backgroundColor: 'rgba(24,95,165,0.08)', fill: true, pointRadius: 0, borderWidth: 2, tension: 0.3 },
+        { label: '累计本金', data: inputs, borderColor: '#85B7EB', backgroundColor: 'transparent', pointRadius: 0, borderWidth: 1.5, borderDash: [5,3], tension: 0.3 },
+        { label: '累计利息', data: interests, borderColor: '#1D9E75', backgroundColor: 'rgba(29,158,117,0.06)', fill: true, pointRadius: 0, borderWidth: 1.5, tension: 0.3 }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.dataset.label + ': ' + fmt(ctx.parsed.y) + ' 元',
+            title: ctx => {
+              const mo = parseInt(ctx[0].label);
+              return '第 ' + mo + ' 个月（约 ' + (mo/12).toFixed(1) + ' 年）';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { maxTicksLimit: 8, color: '#888780', font: { size: 11 }, callback: (_, i, ticks) => {
+            const mo = parseInt(labels[i]);
+            return mo >= 12 ? (mo/12).toFixed(1) + 'yr' : mo + 'mo';
+          }},
+          grid: { color: 'rgba(136,135,128,0.12)' }
+        },
+        y: {
+          ticks: { color: '#888780', font: { size: 11 }, callback: v => fmt(v) },
+          grid: { color: 'rgba(136,135,128,0.12)' }
+        }
+      }
+    }
+  });
+}
+
+['principal','contribution','annual-rate','rounds'].forEach(id => {
+  document.getElementById(id).addEventListener('input', update);
+});
+
+update();
+</script>
